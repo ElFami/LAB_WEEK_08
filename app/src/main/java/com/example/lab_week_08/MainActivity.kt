@@ -11,16 +11,16 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.work.Constraints
+import androidx.work.Data
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
-import androidx.work.Data
 import com.example.lab_week_08.worker.FirstWorker
 import com.example.lab_week_08.worker.SecondWorker
 
 class MainActivity : AppCompatActivity() {
 
-    private val workManager = WorkManager.getInstance(this)
+    private val workManager by lazy { WorkManager.getInstance(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,32 +32,45 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+            }
+        }
+
+
         val networkConstraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
         val id = "001"
 
-        val firstRequest = OneTimeWorkRequest
-            .Builder(FirstWorker::class.java)
+
+        val firstRequest = OneTimeWorkRequest.Builder(FirstWorker::class.java)
             .setConstraints(networkConstraints)
             .setInputData(getIdInputData(FirstWorker.INPUT_DATA_ID, id))
             .build()
 
-        val secondRequest = OneTimeWorkRequest
-            .Builder(SecondWorker::class.java)
+
+        val secondRequest = OneTimeWorkRequest.Builder(SecondWorker::class.java)
             .setConstraints(networkConstraints)
             .setInputData(getIdInputData(SecondWorker.INPUT_DATA_ID, id))
             .build()
+
 
         workManager.beginWith(firstRequest)
             .then(secondRequest)
             .enqueue()
 
+
         workManager.getWorkInfoByIdLiveData(firstRequest.id)
             .observe(this) { info ->
                 if (info?.state?.isFinished == true) {
                     showResult("First process is done")
+
                 }
             }
 
@@ -65,6 +78,7 @@ class MainActivity : AppCompatActivity() {
             .observe(this) { info ->
                 if (info?.state?.isFinished == true) {
                     showResult("Second process is done")
+                    launchNotificationService()
                 }
             }
 
@@ -77,5 +91,21 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
-    // ... rest of class (enableEdgeToEdge, companion object if any)
+
+    private fun launchNotificationService() {
+        NotificationService.trackingCompletion.observe(this) { Id ->
+            showResult("Process for Notification Channel ID $Id is done!")
+        }
+
+        val serviceIntent = Intent(this, NotificationService::class.java).apply {
+            putExtra(NotificationService.EXTRA_ID, "001")
+        }
+
+        ContextCompat.startForegroundService(this, serviceIntent)
+    }
+
+
+    companion object {
+        const val EXTRA_ID = "Id"
+    }
 }
